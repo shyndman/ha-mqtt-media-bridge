@@ -1,27 +1,45 @@
 # Agent Skills
 
 Task-triggered playbooks written against the open [Agent Skills standard](https://agentskills.io/specification), which
-Claude Code, GitHub Copilot, VS Code, OpenAI Codex CLI, Cursor, Gemini CLI and others implement.
+Claude Code, GitHub Copilot, VS Code, OpenAI Codex CLI, OpenCode, Cursor, Gemini CLI and others implement.
 
 For how this directory is discovered, which client reads which path, the placeholder convention, and how to customize
 any of it in your own repository, see [`../README.md`](../README.md). This file is about the skills themselves.
 
 ## Available skills
 
-| Skill                                                   | Use when                                                                  |
-| ------------------------------------------------------- | ------------------------------------------------------------------------- |
-| [`ha-entity-platform`](ha-entity-platform/SKILL.md)     | adding or changing an entity platform or an individual entity             |
-| [`ha-service-action`](ha-service-action/SKILL.md)       | adding or changing a service action (`services.yaml` + handler)           |
-| [`ha-config-flow`](ha-config-flow/SKILL.md)             | config flow, options, reauth, reconfigure, discovery, subentries          |
-| [`ha-coordinator-debug`](ha-coordinator-debug/SKILL.md) | entities unavailable, stale data, setup failures, runtime debugging       |
-| [`ha-translations`](ha-translations/SKILL.md)           | `translations/*.json`, `icons.json`, entity and exception translations    |
-| [`ha-testing`](ha-testing/SKILL.md)                     | writing or fixing tests with `pytest-homeassistant-custom-component`      |
-| [`ha-quality-review`](ha-quality-review/SKILL.md)       | auditing the integration against the Integration Quality Scale            |
-| [`ha-modern-apis`](ha-modern-apis/SKILL.md)             | verifying an API is current, or fixing deprecation warnings               |
-| [`ha-breaking-changes`](ha-breaking-changes/SKILL.md)   | anything that could break existing installs — IDs, entry data, migrations |
-| [`ha-planning`](ha-planning/SKILL.md)                   | planning a large change or recording an architectural decision            |
-| [`ha-release`](ha-release/SKILL.md)                     | cutting a release, commit messages, changelog, release notes              |
-| [`blueprint-tooling`](blueprint-tooling/SKILL.md)       | validation scripts, hook scripts, dependencies, template sync             |
+| Skill                                                   | Use when                                                                   |
+| ------------------------------------------------------- | -------------------------------------------------------------------------- |
+| [`ha-entity-platform`](ha-entity-platform/SKILL.md)     | adding or changing an entity platform or an individual entity              |
+| [`ha-service-action`](ha-service-action/SKILL.md)       | adding or changing a service action (`services.yaml` + handler)            |
+| [`ha-config-flow`](ha-config-flow/SKILL.md)             | config flow, options, reauth, reconfigure, discovery, subentries           |
+| [`ha-coordinator-debug`](ha-coordinator-debug/SKILL.md) | entities unavailable, stale data, setup failures, runtime debugging        |
+| [`ha-translations`](ha-translations/SKILL.md)           | `translations/*.json`, `icons.json`, entity and exception translations     |
+| [`ha-testing`](ha-testing/SKILL.md)                     | writing or fixing tests with `pytest-homeassistant-custom-component`       |
+| [`ha-quality-review`](ha-quality-review/SKILL.md)       | auditing the integration against the Integration Quality Scale             |
+| [`ha-modern-apis`](ha-modern-apis/SKILL.md)             | verifying an API is current, or fixing deprecation warnings                |
+| [`ha-breaking-changes`](ha-breaking-changes/SKILL.md)   | anything that could break existing installs — IDs, entry data, migrations  |
+| [`ha-grill`](ha-grill/SKILL.md)                         | interviewing the developer until a change's requirements are settled       |
+| [`ha-planning`](ha-planning/SKILL.md)                   | planning a large change or recording an architectural decision             |
+| [`ha-release`](ha-release/SKILL.md)                     | cutting a release, commit messages, changelog, release notes               |
+| [`ha-marketplace`](ha-marketplace/SKILL.md)             | publishing through the Marketplace/HACS catalog, `hacs.json`, brand images |
+| [`ha-issue-triage`](ha-issue-triage/SKILL.md)           | working through the GitHub issue backlog via branch + PR                   |
+| [`blueprint-tooling`](blueprint-tooling/SKILL.md)       | validation scripts, hook scripts, dependencies, template sync              |
+| [`blueprint-update`](blueprint-update/SKILL.md)         | carrying over blueprint changes the template sync cannot deliver           |
+| [`blueprint-scaffold`](blueprint-scaffold/SKILL.md)     | turning the fresh template into an integration for one real device         |
+| [`blueprint-import`](blueprint-import/SKILL.md)         | migrating an existing custom integration into this repository              |
+
+`blueprint-scaffold` and `blueprint-import` are one-time skills: each ends with a step that removes itself once its
+job is done. Leaving them in place costs context in every later session.
+
+<!-- blueprint-only:start -->
+
+[`blueprint-skill-maintenance`](blueprint-skill-maintenance/SKILL.md) covers maintaining this shipped set — the
+rule-versus-procedure seam, the catalogue duplication, and what to re-verify after a Home Assistant version bump.
+`initialize.sh` removes it when a project is initialised from the template, because it is only meaningful in the
+blueprint repository itself.
+
+<!-- blueprint-only:end -->
 
 ## Naming
 
@@ -30,7 +48,7 @@ Two namespaces are in use, by topic rather than by origin:
 | Prefix       | Covers                                                            |
 | ------------ | ----------------------------------------------------------------- |
 | `ha-`        | Home Assistant integration development — entities, flows, testing |
-| `blueprint-` | This repository's own tooling — scripts, dependencies, sync       |
+| `blueprint-` | Tooling the template ships — scripts, dependencies, sync          |
 
 Both are reserved for skills that ship with the blueprint. **Give your own skills a different prefix** — your
 integration's short name works well. That keeps a future blueprint skill from colliding with yours, and makes it
@@ -66,8 +84,6 @@ mechanical rule and names the violation. What follows is only what the spec does
    repository's target set might not support.
 5. **List reference files in a `File | When to read` table** so an agent can pick one without opening all of them.
 6. Run `script/skills-check` and `script/markdown`.
-7. Add or update `evals/evals.json` and run `script/skill-evals <skill-name>` to confirm the skill actually changes
-   behaviour.
 
 ## Authoring principles
 
@@ -88,21 +104,12 @@ not the tool names of one particular agent, which differ per vendor and change o
 **Stay template-sync safe.** Use the `<domain>` and `{ClassPrefix}` placeholders, never the concrete identifiers —
 `script/skills-check` fails the build if a real one slips in.
 
-## Validating and testing skills
+## Validating skills
 
 ```bash
-script/skills-check                     # structure: frontmatter, limits, links, placeholders
-script/skill-evals                      # behaviour: all skills (costs model calls)
-script/skill-evals ha-entity-platform   # behaviour: one skill
+script/skills-check  # structure: frontmatter, limits, links, placeholders
 ```
 
 `script/skills-check` runs as part of `script/lint`, `script/lint-check` and therefore CI, and as a pre-commit hook on
 `.agents/skills/`. When the optional [`skills-ref`](https://pypi.org/project/skills-ref/) package is installed it also
 cross-checks each skill with the Agent Skills reference validator.
-
-`evals/evals.json` follows the [canonical format](https://agentskills.io/skill-creation/evaluating-skills) — assertions
-are plain strings — so Anthropic's `skill-creator` plugin can run the same files with a with-skill/without-skill
-baseline if you want the deeper loop.
-
-`script/skill-evals` sends each eval prompt to an agent running in this repository, then grades the answer against that
-eval's assertions with a second model call. It is deliberately not part of `script/check`.
