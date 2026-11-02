@@ -1,9 +1,16 @@
 ---
+name: "Translation Files"
+description: "Key structure, placeholders, entity translations, and formality rules"
 applyTo: "**/translations/*.json"
-globs: "**/translations/*.json"
+paths:
+  - "**/translations/*.json"
 ---
 
 # Translation Files Instructions
+
+**Procedure:** [`ha-translations`](../skills/ha-translations/SKILL.md) — load it before adding or changing strings.
+This file is the rule set; the skill is which keys a given change actually needs, which is where most missing-key
+findings from `script/hassfest` come from.
 
 **Applies to:** `custom_components/<your_domain>/translations/*.json`
 
@@ -41,27 +48,39 @@ Translation files define user-facing text for config flows, options, entities, a
 
 **Note:** This is about quotes _inside the string value_, not the JSON delimiter quotes (which must always be double quotes per JSON spec).
 
-**Key references:** Use `[%key:...]` syntax to reuse translations
+**Placeholder names are valid identifiers** (`[a-zA-Z_][a-zA-Z0-9_]*`) **and say what they hold** — `{device_name}`, not
+`{name2}` or `{0}`; the name is the translator's only context. Entity state values take no placeholders at all.
 
-```json
-{
-  "config": {
-    "error": {
-      "invalid_auth": "Invalid credentials",
-      "stale_auth": "[%key:component::{domain}::config::error::invalid_auth%]"
-    }
-  }
-}
-```
+**No plural syntax.** ICU forms like `{count, plural, one {…} other {…}}` are frontend-only. Phrase the string so it
+reads right for any number: "Devices found: {count}", not "{count} device(s) found".
 
-**Reference Home Assistant common strings:**
+**A translation whose placeholders differ from `en.json` is dropped** — Home Assistant logs an error and shows the
+English string instead. Keep the placeholder set identical in every language.
 
-```json
-"state": {
-  "off": "[%key:common::state::off%]",
-  "on": "[%key:common::state::on%]"
-}
-```
+### What hassfest rejects in a string
+
+- A URL — put it in a placeholder (`"Get a key from {settings_url}."`) and pass it from code
+- HTML tags — Markdown where the field supports it, plain text elsewhere
+- Leading or trailing whitespace
+- A key that is not lowercase `a-z`, `0-9`, `_` or `-`, or that starts, ends or doubles a `_`/`-` — entity, state,
+  action and field keys alike
+
+### Core's shared strings
+
+**NEVER use `[%key:...%]` references, and never create `strings.json`.** Both are Home Assistant **Core**
+build-time features. Core compiles `strings.json` into `translations/en.json` and resolves the references on the way;
+a custom integration has no such build step, so its `translations/*.json` is served exactly as written.
+
+- ❌ `"stale_auth": "[%key:component::{domain}::config::error::invalid_auth%]"` — the UI shows that literal string
+- ❌ `"off": "[%key:common::state::off%]"` — Core's `common` strings do not exist here
+- ✅ Write out the full English text for every key, even when it duplicates another key or a Core string
+
+**Copy Core's wording rather than inventing a variant.** The shared strings are under `common` in the installed
+`.venv/lib/python3.*/site-packages/homeassistant/strings.json` — `cannot_connect` is "Failed to connect",
+`invalid_auth` is "Invalid authentication", the reauth title is "Authentication expired for {name}".
+
+Symptom when this is wrong: the config flow shows raw keys (`username` instead of `Username`) instead of translated
+labels.
 
 ### Entity Translations
 
@@ -77,7 +96,7 @@ Translation files define user-facing text for config flows, options, entities, a
 "entity": {
   "sensor": {
     "air_quality": {
-      "name": "Air Quality Index",
+      "name": "Air quality index",
       "state": {
         "good": "Good",
         "poor": "Poor"
@@ -105,64 +124,51 @@ These fields support Markdown formatting:
 
 ### Formality Level
 
-**Use informal language** in languages that distinguish between formal and informal address:
-
-- **German:** Use "du" (informal), not "Sie" (formal). Use correct imperative forms (e.g., "Gib", not "Gebe").
-- **French:** Use "tu" (informal), not "vous" (formal)
-- **Spanish:** Use "tú" (informal), not "usted" (formal)
-- Apply to all variations (we/you plural: wir/ihr, nous/vous, etc.)
-
-**Example (German):**
-
-- ✅ "Gib deine Anmeldedaten ein" (informal, correct imperative)
-- ❌ "Geben Sie Ihre Anmeldedaten ein" (formal)
-- ❌ "Gebe deine Anmeldedaten ein" (wrong imperative form)
-
-**German-specific rule:** Pay attention to correct imperative forms (Befehlsform). See [Duden: Bildung des Imperativs](https://www.duden.de/sprachwissen/sprachratgeber/Bildung-des-Imperativs).
+**Use the form of address Home Assistant already uses in that language**, so the integration does not switch register
+mid-dialog: German "du" not "Sie", Spanish "tú" not "usted", French "vous" not "tu". The per-language agreements are on
+the [language guidelines](https://contributors.home-assistant.io/translate/reference/languages/) page; for a language
+it does not list, follow Core's own `translations/<lang>.json`. German additionally needs the correct imperative:
+"Gib deine Anmeldedaten ein", never "Gebe" ([Duden: Bildung des
+Imperativs](https://www.duden.de/sprachwissen/sprachratgeber/Bildung-des-Imperativs)).
 
 ### Multi-Language Files
 
-All language files must have identical structure - only values differ:
+All language files must have identical structure — only the values differ. A region-specific file (`fr-CA`, `pt-BR`)
+falls back to **English**, not to its base language, for every key it lacks — so copy the base language's string for
+each key that reads the same in the region, rather than leaving it out.
 
-**en.json:**
+## UI Text Style
 
-```json
-{ "config": { "step": { "user": { "title": "Configure Device" } } } }
-```
+English strings follow Home Assistant's [UI text guidelines](https://contributors.home-assistant.io/design/ui-text/)
+and its [style guide](https://contributors.home-assistant.io/writing/reference/style/):
 
-**de.json:**
+- American English, active voice, and "you"/"your" — never "the user"
+- Sentence case for titles, labels, buttons and names: "Scan interval", not "Scan Interval"
+- "Home Assistant" in full — never "HA" or "HASS"
+- No "e.g.", "i.e." or "etc." — "like", "for example", "such as"
+- The Oxford comma: "Zigbee, Z-Wave, and Matter"
+- No all caps for emphasis
+- "Select", not "click"
+- Backticks around code-like values (entity IDs, file names); brand and protocol names as their owners write them
+- Product terms in lowercase mid-sentence: automation, entity, device
+- **Remove** when the thing still exists afterwards, **delete** when it is gone for good; **add** something that
+  exists, **create** something new
 
-```json
-{ "config": { "step": { "user": { "title": "Gerät konfigurieren" } } } }
-```
-
-## Common Mistakes
-
-- ❌ Translating placeholder names (e.g., `{host}` → `{hôte}`)
-- ❌ Translating proper nouns (Home Assistant, brand names)
-- ❌ Using formal language (Sie/vous) instead of informal (du/tu)
-- ❌ Missing `translation_key` in entity code
-- ❌ Using entity translations without `has_entity_name=True`
-- ❌ Inconsistent key structure across language files
-- ❌ Invalid JSON syntax (trailing commas, comments)
-- ❌ Wrong key reference syntax (must be exact: `[%key:...]`)
+**One thing has one name**, the one the [glossary](https://contributors.home-assistant.io/glossary/) gives it. Never
+the retired ones: "action", not "service"; "integration", not "component"; "app", not "add-on"; "dashboard", not
+"Lovelace"; "backward-incompatible change", not "breaking change" (in text users read — commit footers keep
+`BREAKING CHANGE:`).
 
 ## Best Practices
 
-**Translation Quality Guidelines:**
-
-1. **Only native speakers** should provide translations
-2. **Stick to [Material Design guidelines](https://material.io/design/communication/writing.html)** for writing
-3. **Don't translate proper nouns** (Home Assistant, Supervisor, brand names)
-4. **Keep badge labels short** - Test `state_badge` translations fit in UI without overflowing
-5. **Use key references** `[%key:...]` to avoid duplicate translations
-6. **Keep consistent terminology** within and across languages
-7. **Provide helpful descriptions** for non-obvious fields in `data_description`
-
-**For region-specific translations** (e.g., `en-US`, `fr-CA`): Only include if translations differ from base language. Clone unchanged keys from source (helps track review status).
+- **Only native speakers** should provide translations
+- **Keep badge labels short** — a `state_badge` translation that overflows is only visible in the UI
+- **Keep consistent terminology** within and across languages
+- **Provide helpful descriptions** for non-obvious fields in `data_description`
 
 ## References
 
-- [Custom Integration Localization](https://developers.home-assistant.io/docs/internationalization/custom_integration) - **Primary reference**
-- [Backend Localization](https://developers.home-assistant.io/docs/internationalization/core) - Complete structure documentation
-- [ICU Message Format](https://formatjs.github.io/docs/core-concepts/icu-syntax/) - Placeholder syntax for plurals
+- [Translations](https://contributors.home-assistant.io/core/integrations/translations/) - **Primary reference** for
+  the key structure; it documents Core's `strings.json` and `[%key:...%]` syntax, neither of which applies here
+- [UI text](https://contributors.home-assistant.io/design/ui-text/) and the
+  [glossary](https://contributors.home-assistant.io/glossary/) - wording and terms

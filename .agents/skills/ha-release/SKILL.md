@@ -7,8 +7,9 @@ description: >-
   Covers the Conventional Commits rules commitlint enforces here, how release-please derives the version and
   changelog, the pre-1.0 bump rules, script/version and script/release-notes, skipping a commit from the notes,
   and the commit rules this project enforces for agents. SYMPTOMS — load this if you are about to: commit without
-  an explicit request; offer to `git push`; label a user-facing fix as `chore`; write a commit subject over 72
-  characters or in sentence case; or edit the version in `manifest.json` by hand.
+  an explicit request; offer to `git push`; label a user-facing fix as `chore` (chore, like every hidden type, never
+  reaches the changelog and never triggers a release); write a commit subject over 100 characters or in sentence case;
+  or edit the version in `manifest.json` by hand.
 ---
 
 # Releases and commit messages
@@ -30,7 +31,13 @@ The format, the allowed types and scopes, the rules commitlint enforces, and the
 [`blueprint.commit-message.instructions.md`](../../instructions/blueprint.commit-message.instructions.md),
 which Copilot loads for every file. Read it before writing a message.
 
-What that file does not tell you is what your choice costs or buys at release time:
+What that file does not tell you is what your choice costs at release time: **a user-facing change committed under a
+hidden type (`refactor`, `chore`, `docs`, `test`, `ci`) never reaches the changelog and never triggers a release** —
+only `feat`, `fix`, `perf`, and breaking changes do. If a change matters to a user, pick one of those honestly instead
+of reaching for `chore`.
+
+When you tell someone which type to use, say this consequence out loud — "X, because Y is hidden from the changelog
+and never ships a release" — don't just name the type and cite the instructions file's definition of it.
 
 ## What each type does to the release
 
@@ -43,9 +50,6 @@ What that file does not tell you is what your choice costs or buys at release ti
 | `refactor`, `chore`, `docs`, `test`, `ci` | hidden            | no release                         |
 
 After `1.0.0`, standard SemVer applies: `feat` → minor, `fix` → patch, breaking → major.
-
-This means a user-facing fix committed as `chore` never reaches users. If a change matters to a user, it is `feat`,
-`fix`, or `perf` — pick honestly.
 
 Breaking changes need both markers, and the footer text is what users read:
 
@@ -69,9 +73,13 @@ commits on main → release-please opens/updates "chore(main): release X.Y.Z"
 ```
 
 `manifest.json` → `version` is the source of truth and is bumped inside the release PR by release-please
-(`release-please-config.json` → `extra-files`). Never edit it by hand.
+(`release-please-config.json` → `extra-files`). Never edit it by hand. The Marketplace depends on that: it offers the tag of the latest published GitHub Release — a bare tag is not enough — expects
+`version` to equal it, and shows the release body as the notes in the update dialog.
 
 There is no automatic merge. The developer decides when to release.
+
+How a published release reaches users, and getting the repository into the catalog in the first place, is
+[`ha-marketplace`](../ha-marketplace/SKILL.md).
 
 ## Commands
 
@@ -88,6 +96,9 @@ script/release-notes --interactive # write context to .agents/scratch/ and open 
 `script/release-notes` needs GitHub Copilot CLI and `gh auth login`. It finds the PR labelled
 `autorelease: pending`, collects commits and a compact diff since the last tag, and rewrites the notes for a
 user-facing audience. Tunable via `COPILOT_MODEL` and `RELEASE_NOTES_DIFF_MAX`.
+
+**The generated notes are a draft.** Whoever publishes the release is accountable for their technical accuracy, so
+they get read before the release PR is merged — not after ([`AI_POLICY.md`](../../../AI_POLICY.md)).
 
 To keep an internal commit out of the notes, add a trailer to its body:
 
@@ -113,7 +124,10 @@ Also confirm:
 - The changelog entries read as user-facing statements, not commit titles.
 - Every breaking change has a `BREAKING CHANGE:` footer and a migration note.
 - `docs/user/` and the README match the released behaviour.
-- The minimum Home Assistant version in `hacs.json` and `manifest.json` is still accurate.
+- `hacs.json` → `homeassistant` is still the minimum this release needs
+  ([`ha-marketplace`](../ha-marketplace/SKILL.md#2-hacsjson--when-to-touch-it)); raising it is a breaking change
+  ([`ha-breaking-changes`](../ha-breaking-changes/SKILL.md)).
+- `custom_components/<domain>/brand/icon.png` is the product's icon, not the blueprint's placeholder.
 
 ## Troubleshooting
 

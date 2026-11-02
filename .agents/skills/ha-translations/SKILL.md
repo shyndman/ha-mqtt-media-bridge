@@ -18,9 +18,10 @@ description: >-
 when a string is missing, so a missing key is a visible bug, not a cosmetic one.
 
 **Read [`blueprint.translations.instructions.md`](../../instructions/blueprint.translations.instructions.md)
-first** — it holds the rules: placeholder syntax and the single-quote trap that breaks hassfest, `[%key:…%]` references
-to common strings, entity translation requirements, which fields accept Markdown, proper nouns, the informal-address
-rule per language, and cross-language structure. This skill is which keys a given change needs, and how to write them.
+first** — it holds the rules: placeholder syntax and the single-quote trap that breaks hassfest, why `[%key:…%]` and
+`strings.json` must never appear here, what hassfest rejects in a string, entity translation requirements, which fields
+accept Markdown, proper nouns, the form of address per language, cross-language structure, and the UI text style.
+This skill is which keys a given change needs, and how to write them.
 
 ## The project rule on languages
 
@@ -45,16 +46,22 @@ rule per language, and cross-language structure. This skill is which keys a give
       }
     },
     "error": { "cannot_connect": "…", "invalid_auth": "…", "unknown": "…" },
-    "abort": { "already_configured": "…", "reauth_successful": "…" }
+    "abort": { "already_configured": "…" }
   },
   "options": { "step": { "init": { "data": {}, "data_description": {} } } },
   "entity": { "sensor": { "pm25": { "name": "PM2.5", "state": {} } } },
   "services": { "set_target_value": { "name": "…", "description": "…", "fields": {} } },
   "exceptions": { "set_target_value_failed": { "message": "…" } },
   "issues": { "deprecated_api_endpoint": { "title": "…", "description": "…" } },
-  "selector": { "mode": { "options": { "auto": "Automatic" } } }
+  "selector": { "mode": { "options": { "auto": "Automatic" }, "unit_of_measurement": "seconds" } },
+  "config_subentries": { "device": { "step": { "user": { "data": {} } } } },
+  "device": { "gateway": { "name": "…" } },
+  "system_health": { "info": { "api_endpoint": "…" } }
 }
 ```
+
+`config` also takes `flow_title`, `progress` and `create_entry` alongside `step`. Subentry strings live under
+`config_subentries.<type>`, never under `config`.
 
 ## Which keys does my change need?
 
@@ -69,7 +76,18 @@ rule per language, and cross-language structure. This skill is which keys a give
 | An options flow field              | `options.step.init.data.<field>` and `options.step.init.data_description.<field>`               |
 | A service action                   | `services.<action>.name`, `.description`, `.fields.<field>.name`, `.fields.<field>.description` |
 | A raised `HomeAssistantError`      | `exceptions.<translation_key>.message`                                                          |
-| A repair issue                     | `issues.<issue_id>.title` and `.description` (plus `.fix_flow.*` for a guided fix)              |
+| A repair issue                     | `issues.<issue_id>.title`, plus **either** `.description` **or** `.fix_flow.*` — never both     |
+| A config subentry flow             | `config_subentries.<type>.step.<step>.…`, mirroring the `config` shape                          |
+| A config subentry type             | …plus `config_subentries.<type>.entry_type` and `.initiate_flow.user` (both required)           |
+| A form section                     | `step.<step>.sections.<section>.name` and `.description`; its fields in the section's `data`    |
+| A menu step                        | `step.<step>.menu_options.<option>`                                                             |
+| A custom submit button label       | `step.<step>.submit`                                                                            |
+| A unit that is a word ("steps")    | `entity.<platform>.<key>.unit_of_measurement` — and **no** `native_unit_of_measurement`         |
+| A trigger or condition             | `triggers.<id>` / `conditions.<id>`: `.name`, `.description`, `.fields.<field>.name`            |
+| A `system_health` value            | `system_health.info.<key>`                                                                      |
+
+A repair issue may also carry an optional `short_title`. How to name triggers and conditions:
+[`triggers-conditions.md`](../ha-service-action/references/triggers-conditions.md).
 
 Two rules that catch most mistakes:
 
@@ -77,6 +95,24 @@ Two rules that catch most mistakes:
   not interchangeable.
 - **`data_description` is not optional in practice.** It is the small helper text under a field, and its absence is what
   makes a setup form feel unfinished.
+
+## Abort reasons Home Assistant translates itself
+
+These carry their own text, so they need no `config.abort` key — but only when Home Assistant raises them. A flow that
+calls `async_abort(reason=…)` with one of them itself passes `translation_domain="homeassistant"` or keeps its own key.
+
+| Reason                                        | Raised by                                                                               |
+| --------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `reauth_successful`, `reconfigure_successful` | `async_update_reload_and_abort()` / `async_update_and_abort()` when `reason` is omitted |
+| `already_in_progress`                         | `async_set_unique_id()`                                                                 |
+| `single_instance_allowed`                     | the `single_config_entry` manifest check                                                |
+| `no_devices_found`                            | the `DiscoveryFlowHandler` helper in `config_entry_flow`                                |
+
+`AbstractOAuth2FlowHandler` adds `authorize_url_timeout`, `missing_credentials`, `no_url_available`, `oauth_error`,
+`oauth_failed`, `oauth_implementation_unavailable`, `oauth_timeout`, `oauth_unauthorized` and
+`user_rejected_authorize` — for any `async_abort` on it without a `translation_domain`, including your own.
+
+`already_configured` is not one of them — it needs a key. Neither is the OAuth2 handler's `missing_configuration`.
 
 ## Raising a translated exception
 
@@ -97,18 +133,34 @@ raise HomeAssistantError(
 
 ## Writing the strings
 
-- Sentence case for names and labels ("Target temperature", not "Target Temperature"). Proper nouns keep their casing.
+- The style rules — sentence case, "you", the glossary's terms and the retired names to avoid — are in the
+  [instructions file](../../instructions/blueprint.translations.instructions.md#ui-text-style). Proper nouns and capitalised abbreviations keep their casing.
+- **Keys** are `snake_case` — including translated state values and state attributes. Only the values are prose.
 - No trailing period on `name` and `data` labels; full sentences with a period for `description` and `data_description`.
 - Do not repeat the device or integration name in an entity name — `_attr_has_entity_name = True` means Home Assistant
   prefixes it already. "Temperature", not "Blueprint device temperature".
 - Error messages say what happened and what to do, and never leak credentials, tokens, or raw stack traces.
-- Reuse Home Assistant's common strings where they exist instead of writing a new variant of "Failed to connect" — see
-  the `[%key:…%]` section in the instructions file.
+- Match the wording Home Assistant uses for the same situation rather than inventing a variant —
+  [Core's shared strings](../../instructions/blueprint.translations.instructions.md#cores-shared-strings).
+- Use the word the project already settled on. If `docs/development/GLOSSARY.md` exists it decides the wording here,
+  because renaming an entity later is a breaking change ([`ha-grill`](../ha-grill/SKILL.md) is where those terms are
+  agreed).
 
 ## icons.json
 
 Entity icons belong in `custom_components/<domain>/icons.json`, not in `EntityDescription(icon=...)`.
-The file does not exist yet in this integration — create it when the first icon is needed.
+
+**Do not give an entity an icon its device class already provides.** A PM2.5 sensor, a temperature sensor, a battery
+sensor are all iconed correctly by Home Assistant; overriding them makes the integration look inconsistent with every
+other one. Add an icon where there is no device class, or where the context genuinely differs from it.
+
+Beyond a plain icon, a key can carry:
+
+- `range` — pick by value: `{"0": "mdi:battery-outline", "10": "mdi:battery-10", …}`, ascending, and the icon chosen
+  is the highest bound less than or equal to the current value. `default` covers unavailable or unparseable states.
+  If a key defines both `state` and `range`, **`state` wins**.
+- `state_attributes` — icons per attribute value, for things like a climate preset or a fan mode. Only attributes,
+  not arbitrary keys.
 
 ```json
 {
